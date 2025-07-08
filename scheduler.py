@@ -419,24 +419,30 @@ class MainWindow(QMainWindow):
         toolbar.setMovable(False)
         toolbar.setFloatable(False)
 
+        # Back to the Home Screen Action
         toHomeScreenAction = QAction(QIcon("home.png"), "Home", self)
         toHomeScreenAction.setStatusTip("Home")
         toHomeScreenAction.setToolTip("Go to Home Screen")
         toHomeScreenAction.triggered.connect(self.toHomePage)
         toolbar.addAction(toHomeScreenAction)
 
+        # Add Event Action (Brings you to a specific page for Adding an Event)
         addEventAction = QAction(QIcon("table--plus.png"), "Add Event", self)
         addEventAction.setStatusTip("Add an Event")
         addEventAction.setToolTip("Add an Event")
         addEventAction.triggered.connect(self.toEditPage)
         toolbar.addAction(addEventAction)
 
+        # Delete Event Action (Required to be on View All Events Page, and have an event row selected)
         deleteEventAction = QAction(QIcon("table--minus.png"), "Delete Event", self)
         deleteEventAction.setStatusTip("Delete Event")
         deleteEventAction.setToolTip("Delete Event")
         deleteEventAction.triggered.connect(self.deleteEvent)
         toolbar.addAction(deleteEventAction)
 
+        # Editing Event Action
+
+        # Need to create pixmap in order to edit sizing of icon before adding to action and toolbar
         pixmap = QPixmap("editing.png")
         size = QSize(16,16)
         scaled_pixmap = pixmap.scaled(size, aspectRatioMode=1, transformMode=0)
@@ -447,12 +453,14 @@ class MainWindow(QMainWindow):
         #editEventAction.triggered.connect(self.editEvent)
         toolbar.addAction(editEventAction)
 
+        # View All Events Screen Action
         viewAllEventsAction = QAction(QIcon("table.png"), "View All Events", self)
         viewAllEventsAction.setStatusTip("View All Events")
         viewAllEventsAction.setToolTip("View All Events")
         viewAllEventsAction.triggered.connect(self.toViewAllEventsPage)
         toolbar.addAction(viewAllEventsAction)
 
+        # Setting the Status Bar
         self.setStatusBar(QStatusBar(self))
 
         # Menu Creation
