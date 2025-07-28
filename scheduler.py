@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QColorDialog, QAbstractItemView, QApplication, QMainWindow, QAction, QMenu, QMessageBox, QToolBar, QStatusBar, QWidget, QVBoxLayout, QLabel, QStackedWidget, QPushButton, QLineEdit, QDateEdit, QHBoxLayout, QFormLayout, QCalendarWidget, QTableView, QTextEdit, QTimeEdit
+from PyQt5.QtWidgets import QColorDialog, QAbstractItemView, QApplication, QMainWindow, QAction, QMenu, QMessageBox, QToolBar, QStatusBar, QWidget, QVBoxLayout, QLabel, QStackedWidget, QPushButton, QLineEdit, QDateEdit, QHBoxLayout, QFormLayout, QCalendarWidget, QTableView, QTextEdit, QTimeEdit, QDialog, QDialogButtonBox
 from PyQt5.QtGui import QIcon, QPainter, QColor, QTextCharFormat, QStandardItemModel, QStandardItem, QBrush, QPen, QPixmap
 from PyQt5.QtCore import QDate, Qt, QEvent, QTime, pyqtSignal, QRect, QVariant, QSize
 from PyQt5.QtSql import QSqlDatabase, QSqlTableModel, QSqlQuery
@@ -76,6 +76,54 @@ class EventManager:
                 print(f"EventManager: Event added for {eventDate}: {eventTitle}")
                 return True #success
         return False #failure
+    
+    def updateEvent(self, edited_event_data):
+        if self.db and self.db.isOpen():
+            query = QSqlQuery(self.db)
+            query.prepare('''
+                UPDATE events
+                SET
+                    event_date = :event_date,
+                    title = :title,
+                    description = :description,
+                    event_time = :event_time,
+                    event_color = :event_color
+                WHERE id = :event_id
+            ''')
+
+            val_event_date = edited_event_data.get("event_date")
+            print(f"Binding :event_date -> Value: {val_event_date}, Type: {type(val_event_date)}")
+            query.bindValue(":event_date", edited_event_data["event_date"])
+
+            val_title = edited_event_data.get("title")
+            print(f"Binding :title -> Value: '{val_title}', Type: {type(val_title)}")
+            query.bindValue(":title", edited_event_data["title"])
+
+            val_description = edited_event_data.get("description")
+            print(f"Binding :description -> Value: '{val_description}', Type: {type(val_description)}")
+            query.bindValue(":description", edited_event_data["description"])
+
+            val_event_time = edited_event_data.get("event_time")
+            print(f"Binding :event_time -> Value: {val_event_time}, Type: {type(val_event_time)}")
+            query.bindValue(":event_time", edited_event_data["event_time"])
+
+            val_event_color = edited_event_data.get("event_color")
+            print(f"Binding :event_color -> Value: '{val_event_color}', Type: {type(val_event_color)}")
+            query.bindValue(":event_color", edited_event_data["event_color"])
+
+            val_event_id = edited_event_data.get("event_id")
+            print(f"Binding :event_id -> Value: {val_event_id}, Type: {type(val_event_id)}")
+            query.bindValue(":event_id", edited_event_data["event_id"])
+
+            if not query.exec_():
+                print(f"EventManager: Error Updating event: {query.lastError().text()}")
+                print(f"Prepared Query: {query.lastQuery()}")
+                print(edited_event_data)
+            else:
+                print(f"EventManager: Event Updated for {edited_event_data["event_id"]}: {edited_event_data["event_date"]}: {edited_event_data["title"]}")
+                return True #success
+        return False #failure
+
 
     def getEventsForDate(self, date:QDate):
         if not self.db or not self.db.isOpen(): return []
@@ -403,7 +451,64 @@ class CustomColorPicker(QWidget):
             self.current_color = new_qcolor
             self.update_color_display()
             self.color_changed.emit(self.current_color)
+
+
+class EditEventMessageBox(QDialog):
+    def __init__(self, event_manager:EventManager, selectedEventID):
+        super().__init__()
+        self.setWindowTitle("Editing Selected Event")
+
+        self.selectedEventID = selectedEventID
+
+        self.event_manager = event_manager
+
+        self.selected_event_details = self.event_manager.getEventDetailsbyId(selectedEventID)
         
+        # widgets to add to QMessageBox
+        self.eventDate = QDateEdit()
+        date_to_set = QDate.fromString(self.selected_event_details[0]["event_date"], "yyyy-MM-dd")
+        self.eventDate.setDate(date_to_set)
+        self.eventDate.setCalendarPopup(True)
+        self.eventTitle = QLineEdit()
+        self.eventTitle.setText(self.selected_event_details[0]["title"])
+        self.eventDescription = QTextEdit()
+        self.eventDescription.setText(self.selected_event_details[0]["description"])
+        self.eventTime = QTimeEdit()
+        time_to_set = QTime.fromString(self.selected_event_details[0]["event_time"], "HH:mm:ss.zzz")
+        self.eventTime.setTime(time_to_set)
+        self.eventColor = CustomColorPicker()
+        color_to_set = QColor(self.selected_event_details[0]["event_color"])
+        self.eventColor.set_color(color_to_set)
+
+        form_layout = QFormLayout()
+        form_layout.addRow("Date:", self.eventDate)
+        form_layout.addRow("Title:", self.eventTitle)
+        form_layout.addRow("Description:", self.eventDescription)
+        form_layout.addRow("Time:", self.eventTime)
+        form_layout.addRow("Color:", self.eventColor)
+
+        # widget layout
+        main_layout = QVBoxLayout(self)
+        main_layout.addLayout(form_layout)
+
+        self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
+                                           QDialogButtonBox.StandardButton.Cancel)
+        
+        self.button_box.accepted.connect(self.accept) # <--- Connect 'Ok' to accept()
+        self.button_box.rejected.connect(self.reject) # <--- Connect 'Cancel' to reject()
+
+        main_layout.addWidget(self.button_box)
+
+    def get_edited_event_data(self):
+        return {
+            "event_date": self.eventDate.date().toString("yyyy-MM-dd"),
+            "title": self.eventTitle.text(),
+            "description": self.eventDescription.toPlainText(),
+            "event_time": self.eventTime.time().toString("HH:mm:ss"),
+            "event_color": self.eventColor.get_color().name(QColor.NameFormat.HexRgb),
+            "event_id": self.selectedEventID
+        }
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -450,7 +555,7 @@ class MainWindow(QMainWindow):
         editEventAction = QAction(edit_icon, "Edit Event", self)
         editEventAction.setStatusTip("Edit Event")
         editEventAction.setToolTip("Edit Event")
-        #editEventAction.triggered.connect(self.editEvent)
+        editEventAction.triggered.connect(self.editEvent)
         toolbar.addAction(editEventAction)
 
         # View All Events Screen Action
@@ -471,6 +576,7 @@ class MainWindow(QMainWindow):
         edit_menu = menu.addMenu("&Edit")
         edit_menu.addAction(addEventAction)
         edit_menu.addAction(deleteEventAction)
+        edit_menu.addAction(editEventAction)
         view_menu = menu.addMenu("&View")
         view_menu.addAction(viewAllEventsAction)
 
@@ -525,6 +631,25 @@ class MainWindow(QMainWindow):
 
         self.viewAllEventsScreen.model.select()
         self.homeScreen.calendar.load_event_dates()
+
+    def editEvent(self):
+        if isinstance(self.current_page_widget, EventViewerPage):
+            selected_event_id = self.viewAllEventsScreen.get_selected_row_and_return_event_id()
+            if selected_event_id:
+                editing_event_messagebox = EditEventMessageBox(self.event_manager, selected_event_id)
+                
+                if editing_event_messagebox.exec() == QDialog.DialogCode.Accepted:
+                    edited_event_data = editing_event_messagebox.get_edited_event_data()
+                    if self.event_manager.updateEvent(edited_event_data):
+                        edited_event_success_box = QMessageBox(
+                                                    QMessageBox.Information,
+                                                    "Event Updated!",
+                                                    f"The event with ID: {edited_event_data["event_id"]}, has been updated with the entered information!",
+                                                    QMessageBox.Ok
+                        )
+                        edited_event_success_box.exec_()
+                        self.viewAllEventsScreen.refresh_events_data()
+
 
 
     def deleteEvent(self):
