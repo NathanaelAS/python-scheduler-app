@@ -1,6 +1,6 @@
 import sys
-from PyQt5.QtWidgets import QColorDialog, QAbstractItemView, QApplication, QMainWindow, QAction, QMenu, QMessageBox, QToolBar, QStatusBar, QWidget, QVBoxLayout, QLabel, QStackedWidget, QPushButton, QLineEdit, QDateEdit, QHBoxLayout, QFormLayout, QCalendarWidget, QTableView, QTextEdit, QTimeEdit, QDialog, QDialogButtonBox
-from PyQt5.QtGui import QIcon, QPainter, QColor, QTextCharFormat, QStandardItemModel, QStandardItem, QBrush, QPen, QPixmap
+from PyQt5.QtWidgets import QColorDialog, QAbstractItemView, QApplication, QMainWindow, QAction, QMenu, QMessageBox, QToolBar, QStatusBar, QWidget, QVBoxLayout, QLabel, QStackedWidget, QPushButton, QLineEdit, QDateEdit, QHBoxLayout, QFormLayout, QCalendarWidget, QTableView, QTextEdit, QTimeEdit, QDialog, QDialogButtonBox, QDesktopWidget
+from PyQt5.QtGui import QIcon, QPainter, QColor, QTextCharFormat, QStandardItemModel, QStandardItem, QBrush, QPen, QPixmap, QFont
 from PyQt5.QtCore import QDate, Qt, QEvent, QTime, pyqtSignal, QRect, QVariant, QSize
 from PyQt5.QtSql import QSqlDatabase, QSqlTableModel, QSqlQuery
 import os
@@ -283,10 +283,19 @@ class MainSchedulingCalendar(QCalendarWidget):
     def __init__(self, event_manager:EventManager):
         super().__init__()
         self.event_manager = event_manager
-        
+
+
         self.cached_event_dates = set()
         self.load_event_dates()
 
+        self.apply_stylesheet()
+
+        today_format = QTextCharFormat()
+        today_format.setBackground(QColor("#A6ECA8"))
+        today_format.setForeground(QColor("dark green"))
+        today_format.setFontWeight(QFont.ExtraBold)
+        today_format.setUnderlineStyle(QTextCharFormat.SingleUnderline)
+        self.setDateTextFormat(QDate.currentDate(), today_format)
 
     def load_event_dates(self):
         self.cached_event_dates = self.event_manager.getAllEventDates()
@@ -315,24 +324,75 @@ class MainSchedulingCalendar(QCalendarWidget):
 
                 painter.restore()
                 events_painted_number_padding+=7
+
+    def apply_stylesheet(self):
+        stylesheet = '''
+        QCalendarWidget QWidget#qt_calendar_navigationbar {
+            background-color: #4CAF50; /* Green */
+            border-bottom: 1px solid #388E3C;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            padding: 5px;
+            font-size: 16px;
+        }
+        QCalendarWidget QAbstractItemView::item:selected {
+            /* If setSelectionMode is NoSelection, this may still target today if it's
+               internally marked as 'selected'. Ensure no special background. */
+            background-color: transparent; /* Or match your normal cell background, e.g., #FFFFFF */
+            border: none;
+        }
+        QCalendarWidget QAbstractItemView {
+            background-color: #FFFFFF;
+            /* Allow a custom selection highlight if SingleSelection is ON */
+            selection-background-color: #ADD8E6; /* Light Blue for user selection */
+            selection-color: black;
+            border: none;
+            outline: 0;
+        }
+        '''
+        self.setStyleSheet(stylesheet)
             
 
 class ScreenHome(QWidget):
     def __init__(self, event_manager:EventManager):
         super().__init__()
         layout = QVBoxLayout()
-        headerLabel = QLabel("This is the Home Screen")
+        headerLabel = QLabel("This is the Home Calendar Screen")
         headerLabel.setAlignment(Qt.AlignCenter)
         layout.addWidget(headerLabel)
+
+        button_layout = QHBoxLayout()
+        to_current_date_button = QPushButton()
+        to_current_date_button.setText("Go to Today's Date")
+        to_current_date_button.clicked.connect(self.to_current_date)
+        self.date_lookup_field = QDateEdit()
+        self.date_lookup_field.setCalendarPopup(True)
+        self.date_lookup_field.setDate(QDate.currentDate())
+        self.date_lookup_field.dateChanged.connect(self.to_selected_date)
+        button_layout.addWidget(to_current_date_button)
+        button_layout.addWidget(self.date_lookup_field)
+
+        layout.addLayout(button_layout)
+
         self.event_manager = event_manager
 
 
         self.calendar = MainSchedulingCalendar(self.event_manager)
         self.calendar.setGridVisible(True)
+        self.calendar.selectionChanged.connect(self.on_calendar_selection_changed)
         layout.addWidget(self.calendar)
 
-        layout.addStretch()
+        # layout.addStretch()
         self.setLayout(layout)
+
+    def to_current_date(self):
+        self.calendar.setSelectedDate(QDate.currentDate())
+
+    def to_selected_date(self):
+        self.calendar.setSelectedDate(self.date_lookup_field.date())
+
+    def on_calendar_selection_changed(self):
+        self.date_lookup_field.setDate(self.calendar.selectedDate())
         
 
 class AddEventScreen(QWidget):
@@ -516,7 +576,9 @@ class MainWindow(QMainWindow):
 
         # Main Window Setup
         self.setWindowTitle("Scheduler App")
-        self.setGeometry(100, 100, 500, 300)
+        self.resize(1000, 600)
+
+        self.center()
 
         # Toolbar Creation / StatusBar Setup
         toolbar = QToolBar("Main Toolbar")
@@ -692,6 +754,15 @@ class MainWindow(QMainWindow):
             self.viewAllEventsScreen.event_manager.closeConnection()
         
         super().closeEvent(event)
+
+    def center(self):
+        qr = self.frameGeometry()
+
+        cp = QDesktopWidget().availableGeometry().center()
+
+        qr.moveCenter(cp)
+
+        self.move(qr.topLeft())
 
 
 app = QApplication(sys.argv)
