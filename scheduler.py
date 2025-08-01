@@ -458,6 +458,28 @@ class AddEventScreen(QWidget):
             QMessageBox.warning(self, "Missing Fields", "You are missing one or more of the required fields",QMessageBox.Ok)
 
 
+class AboutScreen(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        icon_pixmap = QPixmap("userIcon1.png").scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        icon_label = QLabel()
+        icon_label.setPixmap(icon_pixmap)
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        name_label = QLabel("Nathanael Spear")
+        title_label = QLabel("Entry Level Software Developer")
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icon_label)
+        layout.addWidget(name_label)
+        layout.addWidget(title_label)
+        layout.addStretch()
+
+        self.setLayout(layout)
+
+
+
 class CustomColorPicker(QWidget):
     color_changed = pyqtSignal(QColor)
 
@@ -627,6 +649,11 @@ class MainWindow(QMainWindow):
         viewAllEventsAction.triggered.connect(self.toViewAllEventsPage)
         toolbar.addAction(viewAllEventsAction)
 
+        about_page_action = QAction("About",self)
+        about_page_action.setStatusTip("About The Program Developer")
+        about_page_action.setToolTip("About The Program Developer")
+        about_page_action.triggered.connect(self.toAboutDeveloperPage)
+
         # Setting the Status Bar
         self.setStatusBar(QStatusBar(self))
 
@@ -641,6 +668,7 @@ class MainWindow(QMainWindow):
         edit_menu.addAction(editEventAction)
         view_menu = menu.addMenu("&View")
         view_menu.addAction(viewAllEventsAction)
+        menu.addAction(about_page_action)
 
         # Stacked Widget Creation and Adding Widgets
         self.stacked_widget = QStackedWidget()
@@ -650,14 +678,16 @@ class MainWindow(QMainWindow):
         self.current_page_widget = self.stacked_widget.currentWidget()
 
         self.event_manager = EventManager(db_filename="events.db")
-        ## Instantiating screen widgets
+        ## Instantiating screen widgets/pages
         self.homeScreen = ScreenHome(self.event_manager)
         self.addEventScreen = AddEventScreen(self.event_manager)
         self.viewAllEventsScreen = EventViewerPage(self.event_manager)
+        self.aboutScreen = AboutScreen()
         ## Adding screen widgets to stacked widget
         self.homeScreen_index = self.stacked_widget.addWidget(self.homeScreen)
         self.addEventScreen_index = self.stacked_widget.addWidget(self.addEventScreen)
         self.eventViewScreen_index = self.stacked_widget.addWidget(self.viewAllEventsScreen)
+        self.aboutScreen_index = self.stacked_widget.addWidget(self.aboutScreen)
 
         # Connecting functions to specific events
         self.addEventScreen.event_added_signal.connect(self.handleEventAdded)
@@ -687,6 +717,9 @@ class MainWindow(QMainWindow):
 
     def toViewAllEventsPage(self):
         self.stacked_widget.setCurrentWidget(self.viewAllEventsScreen)
+
+    def toAboutDeveloperPage(self):
+        self.stacked_widget.setCurrentWidget(self.aboutScreen)
 
     def handleEventAdded(self):
         self.stacked_widget.setCurrentWidget(self.homeScreen)
