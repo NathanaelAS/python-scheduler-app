@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QColorDialog, QAbstractItemView, QApplication, QMainWindow, QAction, QMenu, QMessageBox, QToolBar, QStatusBar, QWidget, QVBoxLayout, QLabel, QStackedWidget, QPushButton, QLineEdit, QDateEdit, QHBoxLayout, QFormLayout, QCalendarWidget, QTableView, QTextEdit, QTimeEdit, QDialog, QDialogButtonBox, QDesktopWidget
+from PyQt5.QtWidgets import QColorDialog, QAbstractItemView, QApplication, QMainWindow, QAction, QMenu, QMessageBox, QToolBar, QStatusBar, QWidget, QVBoxLayout, QLabel, QStackedWidget, QPushButton, QLineEdit, QDateEdit, QHBoxLayout, QFormLayout, QCalendarWidget, QTableView, QTextEdit, QTimeEdit, QDialog, QDialogButtonBox, QDesktopWidget, QStyledItemDelegate, QComboBox, QSpacerItem, QSizePolicy, QFrame
 from PyQt5.QtGui import QIcon, QPainter, QColor, QTextCharFormat, QStandardItemModel, QStandardItem, QBrush, QPen, QPixmap, QFont
 from PyQt5.QtCore import QDate, Qt, QEvent, QTime, pyqtSignal, QRect, QVariant, QSize
 from PyQt5.QtSql import QSqlDatabase, QSqlTableModel, QSqlQuery
@@ -215,14 +215,82 @@ class EventManager:
             QSqlDatabase.removeDatabase(self.connection_name)
             print(f"EventManager: Connection '{self.connection_name}' removed from pool.")
 
+class ColorDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        if index.column() == 5: # "Event Color" Column
+            color_code = index.data(Qt.DisplayRole)
+            if color_code:
+                color = QColor(color_code)
+                if color.isValid():
+                    painter.save()
+                    painter.setRenderHint(QPainter.Antialiasing)
+
+                    # Calculate the size of the square
+                    side = min(option.rect.height(), option.rect.width()) - 8 # Subtract 8px for padding
+                    
+                    # Calculate the position to center the square
+                    x = option.rect.x() + (option.rect.width() - side) / 2
+                    y = option.rect.y() + (option.rect.height() - side) / 2
+                    
+                    # Create the new, smaller rectangle
+                    color_rect = QRect(int(x), int(y), int(side), int(side))
+
+                    painter.setBrush(color)
+                    painter.setPen(Qt.NoPen)
+                    painter.drawRect(color_rect)
+                    painter.restore()
+        else:
+            super().paint(painter, option, index)
 
 class EventViewerPage(QWidget):
     def __init__(self, event_manager):
         super().__init__()
         layout = QVBoxLayout()
         headerLabel = QLabel("Event List")
+        headerLabel.setStyleSheet("font-size: 24px;")
         headerLabel.setAlignment(Qt.AlignCenter)
         layout.addWidget(headerLabel)
+
+        filter_layout = QHBoxLayout()
+        self.title_filter_box = QLineEdit()
+        self.title_filter_box.setPlaceholderText("Enter Event Title to Filter")
+        self.title_filter_box.setFixedWidth(200)
+
+        self.date_filter_label = QLabel("Event Date is")
+        self.date_comparison_selector = QComboBox()
+        self.date_comparison_selector.addItems(["None", "=", ">", "<"])
+        self.date_selector_filter = QDateEdit()
+        self.date_selector_filter.setDate(QDate.currentDate())
+        self.date_selector_filter.setCalendarPopup(True)
+        apply_filter_button = QPushButton("Apply Filter")
+        apply_filter_button.setStyleSheet("background-color: green; padding: 5px; color: white;")
+        apply_filter_button.clicked.connect(self.on_apply_filter_button_clicked)
+        clear_filter_button = QPushButton("Clear Filter")
+        clear_filter_button.setStyleSheet("background-color: red; padding: 5px; color: white;")
+        clear_filter_button.clicked.connect(self.on_clear_filter_button_clicked)
+
+        spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setFrameShadow(QFrame.Sunken)
+
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.VLine)
+        separator2.setFrameShadow(QFrame.Sunken)
+
+        filter_layout.addItem(spacer)
+
+        filter_layout.addWidget(self.title_filter_box)
+        filter_layout.addWidget(separator)
+        filter_layout.addWidget(self.date_filter_label)
+        filter_layout.addWidget(self.date_comparison_selector)
+        filter_layout.addWidget(self.date_selector_filter)
+        filter_layout.addWidget(separator2)
+        filter_layout.addWidget(apply_filter_button)
+        filter_layout.addWidget(clear_filter_button)
+        
+        filter_layout.addItem(spacer)
+        layout.addLayout(filter_layout)
 
         self.event_manager = event_manager
         if not (self.event_manager.db and self.event_manager.db.isOpen()):
@@ -240,6 +308,7 @@ class EventViewerPage(QWidget):
         self.model.setHeaderData(2, Qt.Horizontal, "Title")
         self.model.setHeaderData(3, Qt.Horizontal, "Description")
         self.model.setHeaderData(4, Qt.Horizontal, "Time")
+        self.model.setHeaderData(5, Qt.Horizontal, "Event Color")
 
         if not self.model.select():
             QMessageBox.critical(self, "Model Select Error", f"Failed to select data: {self.model.lastError().text()}")
@@ -257,7 +326,10 @@ class EventViewerPage(QWidget):
         self.table_view.hideColumn(0) #Hides ID column
         #self.table_view.selectionModel().selectionChanged.connect(self.on_selection_changed) # if you want on_selection changed run every time you select a different row
 
+        self.color_delegate = ColorDelegate(self.table_view)
+        self.table_view.setItemDelegateForColumn(5, self.color_delegate)
 
+        
         layout.addWidget(self.table_view)
         self.table_view.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setLayout(layout)
@@ -277,6 +349,27 @@ class EventViewerPage(QWidget):
     def refresh_events_data(self):
         if not self.model.select():
             print(f"EventViewerPage: Error refreshing data: {self.model.lastError().text()}")
+
+    def on_apply_filter_button_clicked(self):
+        selected_date = (self.date_selector_filter.date()).toString("yyyy-MM-dd")
+        if self.title_filter_box.text() != "":
+            if self.date_comparison_selector.currentText() != "None":
+                self.model.setFilter(f"LOWER(title) LIKE '%{self.title_filter_box.text()}%' AND event_date {self.date_comparison_selector.currentText()} '{selected_date}'")
+            else:
+                self.model.setFilter(f"LOWER(title) LIKE '%{self.title_filter_box.text()}%'")
+        else:
+            if self.date_comparison_selector.currentText() != "None":
+                self.model.setFilter(f"event_date {self.date_comparison_selector.currentText()} '{selected_date}'")
+            else:
+                QMessageBox.warning(self, "Invalid Filter Details", "Please edit the filter details to have valid filters and then re-apply the filter.")
+
+        self.model.select()
+
+            
+    def on_clear_filter_button_clicked(self):
+        self.model.setFilter("")
+        self.model.select()
+
 
 
 class MainSchedulingCalendar(QCalendarWidget):
@@ -357,8 +450,9 @@ class ScreenHome(QWidget):
     def __init__(self, event_manager:EventManager):
         super().__init__()
         layout = QVBoxLayout()
-        headerLabel = QLabel("This is the Home Calendar Screen")
+        headerLabel = QLabel("Scheduling Calendar")
         headerLabel.setAlignment(Qt.AlignCenter)
+        headerLabel.setStyleSheet("font-size: 24px;")
         layout.addWidget(headerLabel)
 
         button_layout = QHBoxLayout()
